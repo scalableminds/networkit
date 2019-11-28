@@ -6170,24 +6170,20 @@ cdef class ConnectedComponents(Algorithm):
 		n_nodes = cc_result.n_nodes
 		component_sizes = cc_result.component_sizes
 		n_components = cc_result.n_components
-		array_wrapper = ArrayWrapper()
-		np_mapping_array = array_wrapper.as_ndarray(n_nodes, <void *>components, np.NPY_UINT64)
-		array_wrapper = ArrayWrapper()
-		np_component_sizes = array_wrapper.as_ndarray(n_components, <void *>component_sizes, np.NPY_UINT64)
+		np_mapping_array = ArrayWrapper().as_ndarray(n_nodes, <void *>components, np.NPY_UINT64)
+		np_component_sizes = ArrayWrapper().as_ndarray(n_components, <void *>component_sizes, np.NPY_UINT64)
 
 		# wrap the equivalence classes into a numpy array of numpy arrays
 		cdef void ** equivalence_classes = <void**> cc_result.equivalence_classes
 		for i in range(n_components):
-			array_wrapper = ArrayWrapper()
 			size = component_sizes[i]
 			row = equivalence_classes[i]
-			ndarray = array_wrapper.as_ndarray(size, row, np.NPY_UINT64)
+			ndarray = ArrayWrapper().as_ndarray(size, row, np.NPY_UINT64)
 			# increase ref count for python objects to prevent them from deletion
 			Py_INCREF(ndarray)
 			equivalence_classes[i] = <void*> ndarray
     	
-		array_wrapper = ArrayWrapper()
-		np_equivalence_classes = array_wrapper.as_ndarray(n_components, equivalence_classes, np.NPY_OBJECT)
+		np_equivalence_classes = ArrayWrapper().as_ndarray(n_components, equivalence_classes, np.NPY_OBJECT)
 		
 		return np_mapping_array, np_component_sizes, np_equivalence_classes
 
