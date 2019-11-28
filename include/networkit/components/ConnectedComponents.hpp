@@ -22,6 +22,7 @@ namespace NetworKit {
         node n_nodes;
         node* component_sizes;
         node n_components;
+        node** equivalence_classes;
     };
 
 /**
