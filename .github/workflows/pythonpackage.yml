@@ -58,6 +58,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: Branch Test
+      env:
+        ref: ${{ github.ref }}
+        head_ref: ${{ github.head_ref }}
+      run: |
+        echo $ref
+        echo $head_ref
     - name: Set up Python
       uses: actions/setup-python@v1
       with:
