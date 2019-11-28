@@ -54,7 +54,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from libc.stdlib cimport free
-from cpython cimport PyObject, Py_INCREF
+from cpython cimport PyObject, Py_INCREF, Py_XDECREF
 # Numpy must be initialized. When using numpy from C or Cython you must
 # _always_ do that, or you will have segfaults
 np.import_array()
@@ -67,8 +67,9 @@ np.import_array()
 cdef class ArrayWrapper:
 	cdef void* data_ptr
 	cdef index size
+	cdef int dtype
 
-	cdef set_data(self, index size, void* data_ptr):
+	cdef set_data(self, index size, void* data_ptr, int dtype):
 		""" Set the data of the array
 	
 		This cannot be done in the constructor as it must recieve C-level
@@ -79,25 +80,30 @@ cdef class ArrayWrapper:
 		size: int
 			Length of the array.
 		data_ptr: void*
-			Pointer to the data            
+			Pointer to the data   
+		dtype: int
+			Enum specifying type data_ptr is referring to         
 	
 		"""
 		self.data_ptr = data_ptr
 		self.size = size
+		self.dtype = dtype
 
 	def __array__(self):
 		""" Here we use the __array__ method, that is called when numpy
-		    tries to get an array from the object."""
+		    tries to get an array from the object.
+		    If you pass python objects do not forget to increase their reference count beforehand.
+		"""
 		cdef np.npy_intp shape[1]
 		shape[0] = <np.npy_intp> self.size
 		# Create a 1D array, of length 'size'
 		ndarray = np.PyArray_SimpleNewFromData(1, shape,
-		                                       np.NPY_UINT64, self.data_ptr)
+		                                       self.dtype, self.data_ptr)
 		return ndarray
 
-	cdef as_ndarray(self, index size, void* data_ptr):
+	cdef as_ndarray(self, index size, void* data_ptr, int dtype):
 		cdef np.ndarray ndarray
-		self.set_data(size, data_ptr)
+		self.set_data(size, data_ptr, dtype)
 		ndarray = np.array(self, copy=False)
 		# Assign our object to the 'base' of the ndarray object
 		ndarray.base = <PyObject*> self
@@ -109,6 +115,12 @@ cdef class ArrayWrapper:
 	def __dealloc__(self):
 		""" Frees the array. This is called by Python when all the
 		references to the object are gone. """
+		cdef PyObject** list_of_python_objects
+		# If this wrapper holds python objects we have to decrement their reference count to release them
+		if self.dtype == np.NPY_OBJECT:
+			list_of_python_objects = <PyObject**> self.data_ptr
+			for i in range(self.size):
+				Py_XDECREF(list_of_python_objects[i])
 		free(<void*>self.data_ptr)
 
 
@@ -6066,6 +6078,7 @@ cdef extern from "<networkit/components/ConnectedComponents.hpp>" namespace "Net
 		node n_nodes
 		node* component_sizes
 		node n_components
+		node** equivalence_classes
 
 	cdef cppclass _ConnectedComponents "NetworKit::ConnectedComponents"(_Algorithm):
 		_ConnectedComponents(_Graph G) except +
@@ -6158,11 +6171,25 @@ cdef class ConnectedComponents(Algorithm):
 		component_sizes = cc_result.component_sizes
 		n_components = cc_result.n_components
 		array_wrapper = ArrayWrapper()
-		np_mapping_array = array_wrapper.as_ndarray(n_nodes, <void *>components)
+		np_mapping_array = array_wrapper.as_ndarray(n_nodes, <void *>components, np.NPY_UINT64)
 		array_wrapper = ArrayWrapper()
-		np_component_sizes = array_wrapper.as_ndarray(n_components, <void *>component_sizes)
+		np_component_sizes = array_wrapper.as_ndarray(n_components, <void *>component_sizes, np.NPY_UINT64)
+
+		# wrap the equivalence classes into a numpy array of numpy arrays
+		cdef void ** equivalence_classes = <void**> cc_result.equivalence_classes
+		for i in range(n_components):
+			array_wrapper = ArrayWrapper()
+			size = component_sizes[i]
+			row = equivalence_classes[i]
+			ndarray = array_wrapper.as_ndarray(size, row, np.NPY_UINT64)
+			# increase ref count for python objects to prevent them from deletion
+			Py_INCREF(ndarray)
+			equivalence_classes[i] = <void*> ndarray
+    	
+		array_wrapper = ArrayWrapper()
+		np_equivalence_classes = array_wrapper.as_ndarray(n_components, equivalence_classes, np.NPY_OBJECT)
 		
-		return np_mapping_array, np_component_sizes
+		return np_mapping_array, np_component_sizes, np_equivalence_classes
 
 	@staticmethod
 	def extractLargestConnectedComponent(Graph graph, bool_t compactGraph = False):
