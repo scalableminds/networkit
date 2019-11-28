@@ -42,7 +42,7 @@ jobs:
       run: |
         CC=gcc-9 python setup.py build_ext sdist bdist_wheel
     - name: Publish
-      if: github.ref == 'Dev'
+      if: github.ref == 'refs/heads/Dev'
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
@@ -58,13 +58,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - name: Branch Test
-      env:
-        ref: ${{ github.ref }}
-        head_ref: ${{ github.head_ref }}
-      run: |
-        echo $ref
-        echo $head_ref
     - name: Set up Python
       uses: actions/setup-python@v1
       with:
@@ -110,7 +103,7 @@ jobs:
             \$PYBIN/python -m unittest discover -v networkit/test/"
 
     - name: Publish
-      if: github.ref == 'Dev'
+      if: github.ref == 'refs/heads/Dev'
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
