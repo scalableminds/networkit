@@ -82,11 +82,11 @@ cc_result ConnectedComponents::get_raw_partition(const Graph & G) {
     // reinterpret offsets as index and create equivalence classes
     auto in_class_index = offsets;
     for(node n = 0; n < max_id; ++n) {
-        equivalence_classes[offsets[mapping_array[n]]++] = n;
+        equivalence_classes[in_class_index[mapping_array[n]]++] = n;
     }
     // in_class_index: 1, 3, 8, 14, 17
     // back to offsets: 0, 1, 3, 8, 14
-    for(node component_id = 1; component_id < n_components; ++component_id) {
+    for(node component_id = n_components-1; component_id > 0; --component_id) {
         offsets[component_id] = in_class_index[component_id - 1];
     }
 
