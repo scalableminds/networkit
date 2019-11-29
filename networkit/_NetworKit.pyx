@@ -6074,11 +6074,11 @@ cdef class EdmondsKarp:
 
 cdef extern from "<networkit/components/ConnectedComponents.hpp>" namespace "NetworKit":
 	ctypedef struct cc_result:
-		node* components
-		node n_nodes
-		node* component_sizes
-		node n_components
-		node** equivalence_classes
+		node* components;
+		node n_nodes;
+		node* component_offsets;
+		node n_components;
+		node* equivalence_classes;
 
 	cdef cppclass _ConnectedComponents "NetworKit::ConnectedComponents"(_Algorithm):
 		_ConnectedComponents(_Graph G) except +
@@ -6161,31 +6161,22 @@ cdef class ConnectedComponents(Algorithm):
 	@staticmethod
 	def get_raw_partition(Graph graph):
 		cdef node* components
-		cdef node* component_sizes
+		cdef node* component_offsets
+		cdef node* equivalence_classes
 		cdef np.ndarray np_mapping_array
 		cdef index n_nodes
 		cdef index n_components
 		cc_result = _ConnectedComponents.get_raw_partition(graph._this)
 		components = cc_result.components
 		n_nodes = cc_result.n_nodes
-		component_sizes = cc_result.component_sizes
+		component_offsets = cc_result.component_offsets
 		n_components = cc_result.n_components
+		equivalence_classes = cc_result.equivalence_classes
 		np_mapping_array = ArrayWrapper().as_ndarray(n_nodes, <void *>components, np.NPY_UINT64)
-		np_component_sizes = ArrayWrapper().as_ndarray(n_components, <void *>component_sizes, np.NPY_UINT64)
-
-		# wrap the equivalence classes into a numpy array of numpy arrays
-		cdef void ** equivalence_classes = <void**> cc_result.equivalence_classes
-		for i in range(n_components):
-			size = component_sizes[i]
-			row = equivalence_classes[i]
-			ndarray = ArrayWrapper().as_ndarray(size, row, np.NPY_UINT64)
-			# increase ref count for python objects to prevent them from deletion
-			Py_INCREF(ndarray)
-			equivalence_classes[i] = <void*> ndarray
-    	
-		np_equivalence_classes = ArrayWrapper().as_ndarray(n_components, equivalence_classes, np.NPY_OBJECT)
+		np_component_offsets = ArrayWrapper().as_ndarray(n_components, <void *>component_offsets, np.NPY_UINT64)
+		np_equivalence_classes = ArrayWrapper().as_ndarray(n_nodes, <void *>equivalence_classes, np.NPY_UINT64)
 		
-		return np_mapping_array, np_component_sizes, np_equivalence_classes
+		return np_mapping_array, np_component_offsets, np_equivalence_classes
 
 	@staticmethod
 	def extractLargestConnectedComponent(Graph graph, bool_t compactGraph = False):

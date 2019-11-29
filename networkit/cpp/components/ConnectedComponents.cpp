@@ -67,17 +67,32 @@ cc_result ConnectedComponents::get_raw_partition(const Graph & G) {
     for(node n = 0; n < max_id; ++n) {
         ++mapping_sizes[mapping_array[n]];
     }
-    auto equivalence_classes = new node*[n_components];
+
+    // sizes:   1, 2, 5, 6, 3
+    // offsets: 0, 1, 3, 8, 14
+    node sum = 0;
+    // reuse mapping_sizes as equivalence class offsets
+    auto offsets = mapping_sizes;
     for(node component_id = 0; component_id < n_components; ++component_id) {
-        equivalence_classes[component_id] = new node[mapping_sizes[component_id]];
+        auto tmp = sum;
+        sum += mapping_sizes[component_id];
+        offsets[component_id] = tmp;
+    }
+    auto equivalence_classes = new node[max_id];
+    // reinterpret offsets as index and create equivalence classes
+    auto in_class_index = offsets;
+    for(node n = 0; n < max_id; ++n) {
+        equivalence_classes[offsets[mapping_array[n]]++] = n;
+    }
+    // in_class_index: 1, 3, 8, 14, 17
+    // back to offsets: 0, 1, 3, 8, 14
+    for(node component_id = 1; component_id < n_components; ++component_id) {
+        offsets[component_id] = in_class_index[component_id - 1];
     }
 
-    // reinterpret mapping_sizes as index
-    auto in_class_index = mapping_sizes;
-    std::fill_n(in_class_index, n_components, 0);
-    for(node n = 0; n < max_id; ++n) {
-        auto component_id = mapping_array[n];
-        equivalence_classes[component_id][in_class_index[component_id]++] = n;
+    // set first offset to 0
+    if(n_components > 0){
+        offsets[0] = 0;
     }
 
     return {mapping_array, max_id, mapping_sizes, n_components, equivalence_classes};
