@@ -84,6 +84,7 @@ cc_result ConnectedComponents::get_raw_partition(const Graph & G) {
     }
     auto equivalence_classes = new node[max_id];
     // reinterpret offsets as index and create equivalence classes
+    // within a class nodes are sorted
     auto in_class_index = offsets;
     for(node n = 0; n < max_id; ++n) {
         auto component = mapping_array[n];
