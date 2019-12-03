@@ -6173,8 +6173,8 @@ cdef class ConnectedComponents(Algorithm):
 		n_components = cc_result.n_components
 		equivalence_classes = cc_result.equivalence_classes
 		np_mapping_array = ArrayWrapper().as_ndarray(n_nodes, <void *>components, np.NPY_UINT64)
-		np_component_offsets = ArrayWrapper().as_ndarray(n_components, <void *>component_offsets, np.NPY_UINT64)
-		np_equivalence_classes = ArrayWrapper().as_ndarray(n_nodes, <void *>equivalence_classes, np.NPY_UINT64)
+		np_component_offsets = ArrayWrapper().as_ndarray(n_components +1, <void *>component_offsets, np.NPY_UINT64)
+		np_equivalence_classes = ArrayWrapper().as_ndarray(np_component_offsets[-1], <void *>equivalence_classes, np.NPY_UINT64)
 		
 		return np_mapping_array, np_component_offsets, np_equivalence_classes
 
