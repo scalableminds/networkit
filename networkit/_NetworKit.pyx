@@ -862,14 +862,22 @@ cdef class Graph:
 	
 	@cython.boundscheck(False) # turn off bounds-checking for entire function
 	@cython.wraparound(False)  # turn off negative index wrapping for entire function
-	def addEdges(self, np.ndarray[node, ndim=2] edge_list):
+	def addEdges(self, np.ndarray[node, ndim=2] edge_list, np.ndarray[double, ndim=1] weights=None):
 		cdef Py_ssize_t num_edges = edge_list.shape[0]
 		cdef node n1
 		cdef node n2
-		for index in range(num_edges):
-			n1 = edge_list[index, 0]
-			n2 = edge_list[index, 1]
-			self._this.addEdge(n1, n2, 1.0)
+		if weights is None:
+			for index in range(num_edges):
+				n1 = edge_list[index, 0]
+				n2 = edge_list[index, 1]
+				self._this.addEdge(n1, n2, 1.0)
+		else:
+			for index in range(num_edges):
+				n1 = edge_list[index, 0]
+				n2 = edge_list[index, 1]
+				w = weights[index]
+				self._this.addEdge(n1, n2, w)
+			
 
 	def addEdge(self, u, v, w=1.0, addMissing = False):
 		""" Insert an undirected edge between the nodes `u` and `v`. If the graph is weighted you can optionally

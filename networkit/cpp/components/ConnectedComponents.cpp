@@ -99,9 +99,6 @@ cc_result ConnectedComponents::get_raw_partition(const Graph & G) {
     }
 
     // set first offset to 0 is not necessary as component 0 offset is not increased
-    //if(n_components > 0){
-    //    offsets[0] = 0;
-    //}
 
     return {mapping_array, max_id, offsets, n_components, equivalence_classes};
 }
