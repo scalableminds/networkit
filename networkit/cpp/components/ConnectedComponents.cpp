@@ -62,14 +62,45 @@ cc_result ConnectedComponents::get_raw_partition(const Graph & G) {
         }
     });
 
-    auto mapping_sizes = new node[n_components];
+    // add one to reserve memory for additional last offset (size)
+    auto mapping_sizes = new node[n_components + 1];
     std::fill_n(mapping_sizes, n_components, 0);
+
     for(node n = 0; n < max_id; ++n) {
         ++mapping_sizes[mapping_array[n]];
     }
+    // set size of component 0 to 0
+    mapping_sizes[0] = 0;
 
+    // sizes:   1, 2, 5, 6, 3
+    // offsets: 0, 1, 3, 8, 14
+    node sum = 0;
+    // reuse mapping_sizes as equivalence class offsets
+    auto offsets = mapping_sizes;
+    for(node component_id = 0; component_id < n_components; ++component_id) {
+        auto tmp = sum;
+        sum += mapping_sizes[component_id];
+        offsets[component_id] = tmp;
+    }
+    auto equivalence_classes = new node[max_id];
+    // reinterpret offsets as index and create equivalence classes
+    // within a class nodes are sorted
+    auto in_class_index = offsets;
+    for(node n = 0; n < max_id; ++n) {
+        auto component = mapping_array[n];
+        if(component != 0) {
+            equivalence_classes[in_class_index[component]++] = n;
+        }
+    }
+    // in_class_index: 1, 3, 8, 14, 17, []     // [] is the additional entry for the size at index n_components
+    // back to offsets: 0, 1, 3, 8, 14, [17]
+    for(node component_id = n_components; component_id > 0; --component_id) {
+        offsets[component_id] = in_class_index[component_id - 1];
+    }
 
-    return {mapping_array, max_id, mapping_sizes, n_components};
+    // set first offset to 0 is not necessary as component 0 offset is not increased
+
+    return {mapping_array, max_id, offsets, n_components, equivalence_classes};
 }
 
 void ConnectedComponents::run() {

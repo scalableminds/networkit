@@ -54,7 +54,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from libc.stdlib cimport free
-from cpython cimport PyObject, Py_INCREF
+from cpython cimport PyObject, Py_INCREF, Py_XDECREF
 # Numpy must be initialized. When using numpy from C or Cython you must
 # _always_ do that, or you will have segfaults
 np.import_array()
@@ -67,8 +67,9 @@ np.import_array()
 cdef class ArrayWrapper:
 	cdef void* data_ptr
 	cdef index size
+	cdef int dtype
 
-	cdef set_data(self, index size, void* data_ptr):
+	cdef set_data(self, index size, void* data_ptr, int dtype):
 		""" Set the data of the array
 	
 		This cannot be done in the constructor as it must recieve C-level
@@ -79,25 +80,30 @@ cdef class ArrayWrapper:
 		size: int
 			Length of the array.
 		data_ptr: void*
-			Pointer to the data            
+			Pointer to the data   
+		dtype: int
+			Enum specifying type data_ptr is referring to         
 	
 		"""
 		self.data_ptr = data_ptr
 		self.size = size
+		self.dtype = dtype
 
 	def __array__(self):
 		""" Here we use the __array__ method, that is called when numpy
-		    tries to get an array from the object."""
+		    tries to get an array from the object.
+		    If you pass python objects do not forget to increase their reference count beforehand.
+		"""
 		cdef np.npy_intp shape[1]
 		shape[0] = <np.npy_intp> self.size
 		# Create a 1D array, of length 'size'
 		ndarray = np.PyArray_SimpleNewFromData(1, shape,
-		                                       np.NPY_UINT64, self.data_ptr)
+		                                       self.dtype, self.data_ptr)
 		return ndarray
 
-	cdef as_ndarray(self, index size, void* data_ptr):
+	cdef as_ndarray(self, index size, void* data_ptr, int dtype):
 		cdef np.ndarray ndarray
-		self.set_data(size, data_ptr)
+		self.set_data(size, data_ptr, dtype)
 		ndarray = np.array(self, copy=False)
 		# Assign our object to the 'base' of the ndarray object
 		ndarray.base = <PyObject*> self
@@ -109,6 +115,12 @@ cdef class ArrayWrapper:
 	def __dealloc__(self):
 		""" Frees the array. This is called by Python when all the
 		references to the object are gone. """
+		cdef PyObject** list_of_python_objects
+		# If this wrapper holds python objects we have to decrement their reference count to release them
+		if self.dtype == np.NPY_OBJECT:
+			list_of_python_objects = <PyObject**> self.data_ptr
+			for i in range(self.size):
+				Py_XDECREF(list_of_python_objects[i])
 		free(<void*>self.data_ptr)
 
 
@@ -850,14 +862,22 @@ cdef class Graph:
 	
 	@cython.boundscheck(False) # turn off bounds-checking for entire function
 	@cython.wraparound(False)  # turn off negative index wrapping for entire function
-	def addEdges(self, np.ndarray[node, ndim=2] edge_list):
+	def addEdges(self, np.ndarray[node, ndim=2] edge_list, np.ndarray[double, ndim=1] weights=None):
 		cdef Py_ssize_t num_edges = edge_list.shape[0]
 		cdef node n1
 		cdef node n2
-		for index in range(num_edges):
-			n1 = edge_list[index, 0]
-			n2 = edge_list[index, 1]
-			self._this.addEdge(n1, n2, 1.0)
+		if weights is None:
+			for index in range(num_edges):
+				n1 = edge_list[index, 0]
+				n2 = edge_list[index, 1]
+				self._this.addEdge(n1, n2, 1.0)
+		else:
+			for index in range(num_edges):
+				n1 = edge_list[index, 0]
+				n2 = edge_list[index, 1]
+				w = weights[index]
+				self._this.addEdge(n1, n2, w)
+			
 
 	def addEdge(self, u, v, w=1.0, addMissing = False):
 		""" Insert an undirected edge between the nodes `u` and `v`. If the graph is weighted you can optionally
@@ -6062,10 +6082,11 @@ cdef class EdmondsKarp:
 
 cdef extern from "<networkit/components/ConnectedComponents.hpp>" namespace "NetworKit":
 	ctypedef struct cc_result:
-		node* components
-		node n_nodes
-		node* component_sizes
-		node n_components
+		node* components;
+		node n_nodes;
+		node* component_offsets;
+		node n_components;
+		node* equivalence_classes;
 
 	cdef cppclass _ConnectedComponents "NetworKit::ConnectedComponents"(_Algorithm):
 		_ConnectedComponents(_Graph G) except +
@@ -6148,21 +6169,22 @@ cdef class ConnectedComponents(Algorithm):
 	@staticmethod
 	def get_raw_partition(Graph graph):
 		cdef node* components
-		cdef node* component_sizes
+		cdef node* component_offsets
+		cdef node* equivalence_classes
 		cdef np.ndarray np_mapping_array
 		cdef index n_nodes
 		cdef index n_components
 		cc_result = _ConnectedComponents.get_raw_partition(graph._this)
 		components = cc_result.components
 		n_nodes = cc_result.n_nodes
-		component_sizes = cc_result.component_sizes
+		component_offsets = cc_result.component_offsets
 		n_components = cc_result.n_components
-		array_wrapper = ArrayWrapper()
-		np_mapping_array = array_wrapper.as_ndarray(n_nodes, <void *>components)
-		array_wrapper = ArrayWrapper()
-		np_component_sizes = array_wrapper.as_ndarray(n_components, <void *>component_sizes)
+		equivalence_classes = cc_result.equivalence_classes
+		np_mapping_array = ArrayWrapper().as_ndarray(n_nodes, <void *>components, np.NPY_UINT64)
+		np_component_offsets = ArrayWrapper().as_ndarray(n_components +1, <void *>component_offsets, np.NPY_UINT64)
+		np_equivalence_classes = ArrayWrapper().as_ndarray(np_component_offsets[-1], <void *>equivalence_classes, np.NPY_UINT64)
 		
-		return np_mapping_array, np_component_sizes
+		return np_mapping_array, np_component_offsets, np_equivalence_classes
 
 	@staticmethod
 	def extractLargestConnectedComponent(Graph graph, bool_t compactGraph = False):

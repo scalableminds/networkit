@@ -20,8 +20,9 @@ namespace NetworKit {
     struct cc_result {
         node* components;
         node n_nodes;
-        node* component_sizes;
+        node* component_offsets;
         node n_components;
+        node* equivalence_classes;
     };
 
 /**
